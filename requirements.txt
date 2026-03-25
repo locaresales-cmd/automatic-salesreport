@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+langchain-openai
+langchain-google-genai
+google-generativeai
+pypdf
+beautifulsoup4
+requests
