@@ -7,7 +7,7 @@ import streamlit as st
 import os
 import tempfile
 from utils import extract_text_from_pdf, fetch_website_content
-from report_generator import generate_report_content, fill_excel_template
+from report_generator import generate_report_content, fill_google_sheet
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 import google.generativeai as genai
@@ -119,8 +119,8 @@ with col2:
             st.error("商談テキストを入力してください。")
         elif not manual_file:
              st.error("マニュアルファイルが必要です。")
-        elif not template_path:
-             st.error("テンプレートファイルが必要です。")
+        #elif not template_path:
+         #    st.error("テンプレートファイルが必要です。")
         else:
             transcript_text = ""
             manual_text = ""
@@ -179,45 +179,31 @@ with col2:
                     except Exception as e:
                         st.warning(f"Webサイト情報の取得中にエラーが発生しました: {e}")
 
-                with st.spinner("AIがレポート内容を生成中... (これには時間がかかる場合があります)"):
-                    # Initialize LLM
+                with st.spinner("AIが営業代行レポートを分析中..."):
                     try:
-                        if model_provider == "Google Gemini":
-                            model_name = selected_model_name if selected_model_name else "gemini-1.5-flash"
-                            llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0, max_retries=2)
-                        else:
-                            llm = ChatOpenAI(model="gpt-4o", openai_api_key=api_key, temperature=0, max_retries=2)
+                        # LLMの初期化 (SecretsからAPIキー取得)
+                        llm = ChatGoogleGenerativeAI(model=selected_model_name, google_api_key=api_key)
                         
                         data = generate_report_content(transcript_text, manual_text, website_text, sales_material_text, llm)
-                        # Inject website_url into data for Excel filling
-                        if website_url:
-                            data['website_url'] = website_url
                         
-                        if not data:
-                             st.error("AI生成に失敗しました（結果が空です）。入力テキストが長すぎるか、APIエラーの可能性があります。")
-                        else:
-                            st.success("AI生成完了！ Excelに書き込みます...")
-                            st.json(data) # Show preview of generated data
-                            
-                            # Fill Excel
-                            try:
-                                output_file = "generated_sales_report.xlsx"
-                                result_path = fill_excel_template(template_path, data, output_file)
-                                
-                                if result_path:
-                                    st.success("レポート作成完了！")
-                                    with open(result_path, "rb") as f:
-                                        st.download_button(
-                                            label="Excelファイルをダウンロード",
-                                            data=f,
-                                            file_name="sales_report.xlsx",
-                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                        )
-                            except Exception as e:
-                                st.error(f"Excelファイルへの書き込み中にエラーが発生しました: {e}")
-                                st.warning("テンプレートファイルが開かれているか、破損している可能性があります。")
+                        st.success("分析完了！スプレッドシートを作成します...")
+                        
+                        # SecretsからIDと認証情報を取得
+                        gcp_info = st.secrets["gcp_service_account"]
+                        TEMPLATE_ID = st.secrets["google_drive"]["template_id"]
+                        FOLDER_ID = st.secrets["google_drive"]["folder_id"]
+                        
+                        sheet_url = fill_google_sheet(data, gcp_info, TEMPLATE_ID, FOLDER_ID)
+                        
+                        st.balloons()
+                        st.success("レポートが共有ドライブに作成されました！")
+                        st.link_button("🔥 完成したスプレッドシートを開く", sheet_url)
+                        
+                        with st.expander("抽出データ（JSON）の確認"):
+                            st.json(data)
+
                     except Exception as e:
-                         st.error(f"エラーが発生しました: {e}")
+                        st.error(f"エラーが発生しました: {e}")
 
 st.markdown("---")
 st.caption("Powered by Streamlit & LangChain")
