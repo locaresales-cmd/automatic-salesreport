@@ -106,10 +106,16 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
         'parents': [folder_id]
     }
     
+    # report_generator.py の copy 部分を以下のように補強
     copy_file = drive_service.files().copy(
         fileId=template_id,
-        body=file_metadata,
-        supportsAllDrives=True
+        body={
+            'name': f"{data['cl_company_name']}様_営業レポート",
+            'parents': [folder_id]
+        },
+        supportsAllDrives=True,
+        # 以下の1行を追加してみる
+        ignoreDefaultVisibility=True 
     ).execute()
     
     new_sheet_id = copy_file['id']
