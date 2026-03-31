@@ -91,7 +91,17 @@ def generate_report_content(transcript, manual_text, website_text, sales_materia
     
     _input = prompt.format_prompt(transcript=transcript, website_text=website_text, sales_material_text=sales_material_text)
     output = model_client.invoke(_input.to_string())
-    return parser.parse(output.content).dict()
+
+    # output.contentがリストの場合と文字列の場合の両方に対応
+    if isinstance(output.content, list):
+        output_text = "".join(
+            block["text"] for block in output.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    else:
+        output_text = output.content
+
+    return parser.parse(output_text).dict()
 
 def fill_google_sheet(data, service_account_info, template_id, folder_id):
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
