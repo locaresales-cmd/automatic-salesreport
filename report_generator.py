@@ -111,11 +111,11 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
         fileId=template_id,
         body={
             'name': f"{data['cl_company_name']}様_営業レポート",
-            'parents': [folder_id]
+            'parents': [folder_id],
+            'driveId': folder_id  # ← 共有ドライブのルートIDに変更が必要な場合あり
         },
         supportsAllDrives=True,
-        # 以下の1行を追加してみる
-        ignoreDefaultVisibility=True 
+        keepRevisionForever=False
     ).execute()
     
     new_sheet_id = copy_file['id']
