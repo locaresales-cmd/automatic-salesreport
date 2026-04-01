@@ -15,7 +15,7 @@ import pandas as pd
 
 st.set_page_config(page_title="営業レポート作成AI", layout="wide")
 
-st.title("🗒️ 営業レポート作成AIプラットフォーム")
+st.title("🗒️ 営業レポート作成AI")
 st.markdown("商談の文字起こしとマニュアルから、指定フォーマットの営業レポートを自動生成します。")
 
 # Sidebar for configuration
