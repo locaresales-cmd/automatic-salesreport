@@ -54,8 +54,7 @@ class SalesReport(BaseModel):
     neg_evidence: str = Field(description="架電件数・アポ率エビデンス")
 
     # チェックリスト (31項目)
-    checklist_evaluations: List[ChecklistItem] = Field(description="31個の評価項目に対する○△×評価")
-    
+    checklist_evaluations: List[ChecklistItem] = Field(description="以下の31項目のみを評価する。display_textは各項目の文章を15文字以上含む形で記載すること")    
     questions_from_us: List[QAPair] = Field(description="弊社（株式会社Locareの営業担当）から先方（営業をしている会社）への質問と先方の回答")
     questions_from_client: List[QAPair] = Field(description="先方（営業をしている会社）から弊社（株式会社Locare）への質問とLocareの回答")
 
@@ -68,6 +67,14 @@ def generate_report_content(transcript, manual_text, website_text, sales_materia
 
     【指示】
     1. 会社名は「Webサイト情報」から抽出すること。LocareやSaleshubは運営側なので対象外。
+       HP情報の抽出については以下の優先順位で情報を収集すること：
+       - まず提供されたWebサイト情報から各項目を抽出する。
+       - 情報が不明・不足している項目については、提供されたURLから遷移できる関連ページ
+         （サービス詳細ページ、料金ページ、会社概要ページ、導入事例ページ等）も参照して補完する。
+       - それでも情報が取得できない場合のみ「※情報なし」と記載する。
+       - PDFファイルは参照しないこと。
+       - Locare・Saleshub等、運営側の情報は含めないこと。
+
     2. チェックリスト31項目について、事実に基づき以下の基準で評価してください。
        - 「○」：基準を満たしている／加点要素あり
        - 「△」：一部不足／普通
@@ -216,22 +223,21 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
     if client_qa_values:
         batch_updates.append({'range': f'I18:J{17 + len(client_qa_values)}', 'values': client_qa_values})
 
-    # 5. チェックリスト評価 (G列)
-    # 速度向上のため、一旦C列（質問文）を全取得
-    sheet_questions = ws.col_values(4) # D列
-    checklist_marks = []
-    
-    # D列の質問文に対応する評価を探してリスト化
-    # 31項目の評価を反映
+   # 5. チェックリスト評価（Row130〜160固定・31項目）
+    # D列テキストとの照合でG列に評価、J列に備考を書き込む
+    TARGET_ROWS = list(range(130, 161))  # Row130〜160
+    sheet_d_col = ws.col_values(4)  # D列を取得（0始まりなのでrow-1がindex）
+
     for item in data.get('checklist_evaluations', []):
-        for i, q_text_in_sheet in enumerate(sheet_questions):
-            # 質問文の一部が一致したら、その行のG列(7列目)に評価を入れる
-            if item['display_text'][:10] in q_text_in_sheet:
-                row_num = i + 1
+        for row_num in TARGET_ROWS:
+            d_text = sheet_d_col[row_num - 1] if row_num - 1 < len(sheet_d_col) else ''
+            if item['display_text'][:15] in str(d_text):
+                # G列に評価（○△×）を書き込む
                 batch_updates.append({
                     'range': f'G{row_num}',
                     'values': [[item['evaluation']]]
                 })
+                # △または×の場合、J列に備考を書き込む
                 comment = item.get('comment', '')
                 if comment and item['evaluation'] in ['△', '×']:
                     batch_updates.append({
