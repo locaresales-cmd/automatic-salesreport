@@ -16,13 +16,13 @@ class QAPair(BaseModel):
 class ChecklistItem(BaseModel):
     display_text: str = Field(description="評価項目名")
     evaluation: str = Field(description="○, △, ×, または空欄")
+    comment: str = Field(description="△または×の場合、その理由を具体的に1文で記載。○の場合は空欄")
 
 class SalesReport(BaseModel):
     cl_company_name: str = Field(description="商談相手の企業名")
     cl_attendee_name: str = Field(description="相手方担当者名")
     cl_attendee_role: str = Field(description="相手方役職")
     our_attendee_name: str = Field(description="自社担当者名")
-    overall_score: str = Field(description="総合評価点数(0-100)")
     impression: str = Field(description="全体統括コメント・所感")
     
     # HP情報 (12項目)
@@ -68,7 +68,15 @@ def generate_report_content(transcript, manual_text, website_text, sales_materia
 
     【指示】
     1. 会社名は「Webサイト情報」から抽出すること。LocareやSaleshubは運営側なので対象外。
-    2. チェックリスト31項目について、事実に基づき「○」「△」「×」で評価してください。
+    2. チェックリスト31項目について、事実に基づき以下の基準で評価してください。
+       - 「○」：基準を満たしている／加点要素あり
+       - 「△」：一部不足／普通
+       - 「×」：基準未達／改善が必要
+       - 判断できない場合は空欄
+       必ず全31項目に対していずれかを入力すること。
+       △または×の場合はcommentフィールドに理由を必ず記載すること。
+       display_textは評価項目名を正確に記載すること。
+    
     3. HP情報と商談情報の差分を明確にしてください。
     4. 質疑応答（Q&A）は、商談内で実際に行われたやり取りを抽出してください。その際、内容をそのまま記載するのではなく、質問と回答の要点を簡潔にまとめてください。
 
@@ -183,7 +191,6 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
     batch_updates.append({'range': 'B4', 'values': [[data.get('cl_attendee_name', "")]]})
     batch_updates.append({'range': 'B5', 'values': [[data.get('cl_attendee_role', "")]]})
     batch_updates.append({'range': 'B6', 'values': [[data.get('our_attendee_name', "")]]})
-    batch_updates.append({'range': 'B10', 'values': [[data.get('overall_score', "")]]})
     batch_updates.append({'range': 'A50', 'values': [[data.get('impression', "")]]})
 
     # 2. HP情報 (C35:C46)
@@ -211,19 +218,26 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
 
     # 5. チェックリスト評価 (G列)
     # 速度向上のため、一旦C列（質問文）を全取得
-    sheet_questions = ws.col_values(3) # C列
+    sheet_questions = ws.col_values(4) # D列
     checklist_marks = []
     
-    # C列の質問文に対応する評価を探してリスト化
+    # D列の質問文に対応する評価を探してリスト化
     # 31項目の評価を反映
     for item in data.get('checklist_evaluations', []):
         for i, q_text_in_sheet in enumerate(sheet_questions):
             # 質問文の一部が一致したら、その行のG列(7列目)に評価を入れる
             if item['display_text'][:10] in q_text_in_sheet:
+                row_num = i + 1
                 batch_updates.append({
-                    'range': f'G{i+1}',
+                    'range': f'G{row_num}',
                     'values': [[item['evaluation']]]
                 })
+                comment = item.get('comment', '')
+                if comment and item['evaluation'] in ['△', '×']:
+                    batch_updates.append({
+                        'range': f'J{row_num}',
+                        'values': [[comment]]
+                    })
                 break
 
     # 全データを一括書き込み（これによりAPI呼び出し回数を激減させ、エラーを防ぐ）
