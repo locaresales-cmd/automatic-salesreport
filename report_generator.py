@@ -15,8 +15,8 @@ class QAPair(BaseModel):
 
 class ChecklistItem(BaseModel):
     display_text: str = Field(description="評価項目名")
-    evaluation: str = Field(description="○, △, ×, または空欄")
-    comment: str = Field(description="△または×の場合、その理由を具体的に1文で記載。○の場合は空欄")
+    evaluation: str = Field(description="〇, △, ✕, または空欄")
+    comment: str = Field(description="△または✕の場合、その理由を具体的に1文で記載。〇の場合は空欄")
 
 class SalesReport(BaseModel):
     cl_company_name: str = Field(description="商談相手の企業名")
@@ -76,12 +76,12 @@ def generate_report_content(transcript, manual_text, website_text, sales_materia
        - Locare・Saleshub等、運営側の情報は含めないこと。
 
     2. チェックリスト31項目について、事実に基づき以下の基準で評価してください。
-       - 「○」：基準を満たしている／加点要素あり
+       - 「〇」：基準を満たしている／加点要素あり
        - 「△」：一部不足／普通
-       - 「×」：基準未達／改善が必要
+       - 「✕」：基準未達／改善が必要
        - 判断できない場合は空欄
        必ず全31項目に対していずれかを入力すること。
-       △または×の場合はcommentフィールドに理由を必ず記載すること。
+       △または✕の場合はcommentフィールドに理由を必ず記載すること。
        display_textは評価項目名を正確に記載すること。
     
     3. HP情報と商談情報の差分を明確にしてください。
@@ -232,14 +232,17 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
         for row_num in TARGET_ROWS:
             d_text = sheet_d_col[row_num - 1] if row_num - 1 < len(sheet_d_col) else ''
             if item['display_text'][:15] in str(d_text):
-                # G列に評価（○△×）を書き込む
+                # G列に評価（〇△✕）を書き込む
+                # 〇の文字コードをスプレッドシートの形式に統一
+                evaluation = item['evaluation'].replace('○', '〇').replace('×', '✕')
+                # G列に評価（〇△✕）を書き込む
                 batch_updates.append({
                     'range': f'G{row_num}',
-                    'values': [[item['evaluation']]]
+                    'values': [[evaluation]]
                 })
-                # △または×の場合、J列に備考を書き込む
+                # △または✕の場合、J列に備考を書き込む
                 comment = item.get('comment', '')
-                if comment and item['evaluation'] in ['△', '×']:
+                if comment and evaluation in ['△', '✕']:
                     batch_updates.append({
                         'range': f'J{row_num}',
                         'values': [[comment]]
