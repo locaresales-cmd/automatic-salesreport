@@ -223,7 +223,7 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
     if client_qa_values:
         batch_updates.append({'range': f'I18:J{17 + len(client_qa_values)}', 'values': client_qa_values})
 
-   # 5. チェックリスト評価（Row130〜160固定・31項目）
+    # 5. チェックリスト評価（Row130〜160固定・31項目）
     # D列テキストとの照合でG列に評価、J列に備考を書き込む
     TARGET_ROWS = list(range(130, 161))  # Row130〜160
     sheet_d_col = ws.col_values(4)  # D列を取得（0始まりなのでrow-1がindex）
@@ -234,7 +234,18 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
             if item['display_text'][:15] in str(d_text):
                 # G列に評価（〇△✕）を書き込む
                 # 〇の文字コードをスプレッドシートの形式に統一
-                evaluation = item['evaluation'].replace('○', '〇').replace('×', '✕')
+                # AIが出力する可能性のある全パターンを正規化
+                evaluation = item['evaluation']
+                evaluation = evaluation.replace('○', '〇')  # U+25CB → U+3007
+                evaluation = evaluation.replace('◯', '〇')  # U+25EF → U+3007
+                evaluation = evaluation.replace('O', '〇')  # 半角英字O → U+3007
+                evaluation = evaluation.replace('o', '〇')  # 半角英字o → U+3007
+                evaluation = evaluation.replace('×', '✕')  # U+00D7 → U+2715
+                evaluation = evaluation.replace('✗', '✕')  # U+2717 → U+2715
+                evaluation = evaluation.replace('X', '✕')  # 半角英字X → U+2715
+                evaluation = evaluation.replace('x', '✕')  # 半角英字x → U+2715
+                evaluation = evaluation.strip()             # 前後の空白除去
+
                 # G列に評価（〇△✕）を書き込む
                 batch_updates.append({
                     'range': f'G{row_num}',
