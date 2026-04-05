@@ -179,25 +179,30 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
         'parents': [folder_id]
     }
     
-    # report_generator.py の copy 部分を以下のように補強
-    # まず共有ドライブIDを取得する
-    folder_info = drive_service.files().get(
-        fileId=folder_id,
-        supportsAllDrives=True,
-        fields='driveId'
-    ).execute()
-    shared_drive_id = folder_info.get('driveId', folder_id)
+# フォルダ情報取得（driveIdが取れない場合はNoneのまま進む）
+    try:
+        folder_info = drive_service.files().get(
+            fileId=folder_id,
+            supportsAllDrives=True,
+            fields='driveId'
+        ).execute()
+        shared_drive_id = folder_info.get('driveId')
+    except Exception:
+        shared_drive_id = None
+
+    copy_body = {
+        'name': f"{data['cl_company_name']}様_営業レポート",
+        'parents': [folder_id],
+    }
+    # 共有ドライブIDが取得できた場合のみ追加
+    if shared_drive_id:
+        copy_body['driveId'] = shared_drive_id
+        copy_body['teamDriveId'] = shared_drive_id
 
     copy_file = drive_service.files().copy(
         fileId=template_id,
-        body={
-            'name': f"{data['cl_company_name']}様_営業レポート",
-            'parents': [folder_id],
-            'driveId': shared_drive_id,          # ← 追加
-            'teamDriveId': shared_drive_id,      # ← 追加（後方互換）
-        },
+        body=copy_body,
         supportsAllDrives=True,
-        ignoreDefaultVisibility=True,
         fields='id'
     ).execute()
     
