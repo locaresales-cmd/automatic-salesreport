@@ -218,6 +218,7 @@ def fill_google_sheet(data, service_account_info, template_id, folder_id):
 
     # 1. 基本ヘッダー情報
     batch_updates.append({'range': 'B1', 'values': [[data.get('cl_company_name', "")]]})
+    batch_updates.append({'range': 'B3', 'values': [[data.get('website_url', "")]]})
     batch_updates.append({'range': 'B4', 'values': [[data.get('cl_attendee_name', "")]]})
     batch_updates.append({'range': 'B5', 'values': [[data.get('cl_attendee_role', "")]]})
     batch_updates.append({'range': 'B6', 'values': [[data.get('our_attendee_name', "")]]})

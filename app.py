@@ -115,6 +115,7 @@ with col2:
                         TEMPLATE_ID = st.secrets["google_drive"]["template_id"]
                         FOLDER_ID = st.secrets["google_drive"]["folder_id"]
                         
+                        data['website_url'] = website_url  # URLをdataに追加
                         sheet_url = fill_google_sheet(data, gcp_info, TEMPLATE_ID, FOLDER_ID)
                         
                         st.balloons()
