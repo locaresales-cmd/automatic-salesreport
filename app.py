@@ -6,12 +6,21 @@ import streamlit as st
 import os
 import re
 from utils import extract_text_from_pdf, fetch_website_content
-from report_generator import (
-    generate_report_content,
-    fill_google_sheet,
-    evaluate_checklist_only,
-    write_evaluation_to_existing_sheet,
-)
+try:
+    from report_generator import (
+        generate_report_content,
+        fill_google_sheet,
+        evaluate_checklist_only,
+        write_evaluation_to_existing_sheet,
+    )
+except ImportError as _e:
+    import streamlit as st
+    st.error(
+        f"report_generator.py のインポートに失敗しました。\n\n"
+        f"GitHubに最新の report_generator.py がpushされているか確認してください。\n\n"
+        f"詳細: {_e}"
+    )
+    st.stop()
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 st.set_page_config(page_title="営業レポート作成AI", layout="wide")
