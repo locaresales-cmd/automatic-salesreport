@@ -301,23 +301,45 @@ with tab_eval:
             existing_sheet_url = None
 
         st.subheader("2. 評価対象テキストの入力")
-        eval_text_input = st.text_area(
-            "文字起こし または メール文章を貼り付け",
-            height=300,
-            placeholder="商談文字起こし、またはメール本文をここに貼り付けてください...",
-            key="eval_text",
+        transcript_eval_input = st.text_area(
+            "📹 商談文字起こし（商談態勢・営業人間力・商談対応力の評価に使用）",
+            height=200,
+            placeholder="商談文字起こしをここに貼り付けてください...",
+            key="eval_transcript",
+        )
+        email_eval_input = st.text_area(
+            "📧 メール文章（商談前IS・商談後フォローの評価に使用）",
+            height=150,
+            placeholder="メール本文をここに貼り付けてください...",
+            key="eval_email",
         )
 
     with col_e2:
         st.subheader("3. 評価の範囲と種類を選択")
 
-        st.markdown("**評価するカテゴリ（複数選択可）**")
+        st.markdown("**📹 文字起こしから評価できるカテゴリ**")
+        TRANSCRIPT_CATS = ["営業人間力", "商談対応力"]
+        EMAIL_CATS      = ["商談前IS", "商談後"]
+
         selected_cats = {}
-        for cat_name, cat_info in CHECKLIST_CATEGORIES.items():
-            # 商談対応力をデフォルトONにする
+        for cat_name in TRANSCRIPT_CATS:
+            cat_info = CHECKLIST_CATEGORIES[cat_name]
             default_on = (cat_name == "商談対応力")
             selected_cats[cat_name] = st.checkbox(
                 cat_info["label"], value=default_on, key=f"cat_{cat_name}"
+            )
+
+        st.markdown("**📧 メール文章から評価できるカテゴリ**")
+        email_available = bool(email_eval_input.strip())  # メール入力があるか
+        if not email_available:
+            st.caption("⚠️ メール文章を入力すると選択できます")
+        for cat_name in EMAIL_CATS:
+            cat_info = CHECKLIST_CATEGORIES[cat_name]
+            selected_cats[cat_name] = st.checkbox(
+                cat_info["label"],
+                value=False,
+                key=f"cat_{cat_name}",
+                disabled=not email_available,  # メールなしは選択不可
             )
 
         st.markdown("---")
@@ -332,14 +354,17 @@ with tab_eval:
             errors = []
             if not api_key:
                 errors.append("APIキーを入力してください。")
-            if not eval_text_input.strip():
-                errors.append("文字起こしまたはメール文章を入力してください。")
+            if not transcript_eval_input.strip() and not email_eval_input.strip():
+                errors.append("文字起こしまたはメール文章を少なくとも1つ入力してください。")
             if not any(selected_cats.values()):
                 errors.append("評価するカテゴリを1つ以上選択してください。")
             if not write_evaluation and not write_comment:
                 errors.append("「評価を書き込む」または「備考を書き込む」を選択してください。")
             if sheet_mode == "既存のスプレッドシートURLを入力" and not existing_sheet_url:
                 errors.append("スプレッドシートのURLを入力してください。")
+            mail_cats_selected = any(selected_cats.get(c) for c in EMAIL_CATS)
+            if mail_cats_selected and not email_eval_input.strip():
+                errors.append("商談前IS・商談後フォローの評価にはメール文章の入力が必要です。")
 
             for err in errors:
                 st.error(err)
@@ -355,11 +380,28 @@ with tab_eval:
                 with st.spinner("AIがチェックリストを評価中..."):
                     try:
                         llm = ChatGoogleGenerativeAI(model=selected_model_name, google_api_key=api_key)
-                        checklist_result = evaluate_checklist_only(
-                            text=eval_text_input,
-                            model_client=llm,
-                            target_categories=[k for k, v in selected_cats.items() if v],
-                        )
+                        checklist_result = []
+
+                        # 文字起こし系カテゴリ
+                        transcript_cats_selected = [c for c in TRANSCRIPT_CATS if selected_cats.get(c)]
+                        if transcript_cats_selected and transcript_eval_input.strip():
+                            result_t = evaluate_checklist_only(
+                                text=transcript_eval_input,
+                                model_client=llm,
+                                target_categories=transcript_cats_selected,
+                            )
+                            checklist_result.extend(result_t)
+
+                        # メール系カテゴリ
+                        email_cats_selected = [c for c in EMAIL_CATS if selected_cats.get(c)]
+                        if email_cats_selected and email_eval_input.strip():
+                            result_e = evaluate_checklist_only(
+                                text=email_eval_input,
+                                model_client=llm,
+                                target_categories=email_cats_selected,
+                            )
+                            checklist_result.extend(result_e)
+
                         st.success(f"評価完了！{len(checklist_result)}件の項目を評価しました。")
 
                         # 評価結果プレビュー
