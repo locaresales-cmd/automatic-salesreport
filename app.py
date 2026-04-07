@@ -302,7 +302,7 @@ with tab_eval:
 
         st.subheader("2. 評価対象テキストの入力")
         transcript_eval_input = st.text_area(
-            "📹 商談文字起こし（商談態勢・営業人間力・商談対応力の評価に使用）",
+            "📹 商談文字起こし（営業人間力・商談対応力の評価に使用）",
             height=200,
             placeholder="商談文字起こしをここに貼り付けてください...",
             key="eval_transcript",
