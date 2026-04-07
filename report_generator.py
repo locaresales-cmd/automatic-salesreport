@@ -524,8 +524,8 @@ def write_evaluation_to_existing_sheet(
         item_text_key = item.get("display_text", "")[:15]
         evaluation    = _normalize_evaluation(item.get("evaluation", ""))
         comment       = item.get("comment", "")
-
-        for row_num in target_rows:
+        ALL_CHECKLIST_ROWS = list(range(72, 173))  # シート全体のチェックリスト行
+        for row_num in ALL_CHECKLIST_ROWS:
             d_text = sheet_d_col[row_num - 1] if row_num - 1 < len(sheet_d_col) else ""
             if item_text_key in str(d_text):
                 # G列：評価（〇△✕）

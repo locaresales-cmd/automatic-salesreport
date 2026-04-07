@@ -451,6 +451,7 @@ with tab_eval:
                                 write_comment=write_comment,
                             )
 
+                            # 代わりにreport_generator側でカウントを返すか、件数を表示する
                             st.balloons()
                             st.success("書き込みが完了しました！")
                             st.link_button("🔥 スプレッドシートを開く", final_url)
