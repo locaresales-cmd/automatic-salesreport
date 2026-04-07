@@ -3,51 +3,201 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from typing import List, Dict
-from pydantic import BaseModel, Field
+from typing import List, Dict, Optional
 
 # ==============================
-# 1. データ構造の定義
+# チェックリスト項目の定義
+# カテゴリ別にD列テキストの先頭15文字で照合する
+# ==============================
+CHECKLIST_ITEMS_BY_CATEGORY = {
+    "商談前IS": [
+        "HP問い合わせに対してのレスポンス速度",
+        "商談前段階における連絡の基本的な返信速度（平均）",
+        "メールでのラリー回数は少なく、スムーズに日程調整ができた。",
+        "問い合わせに対しての返信はテンプレートではなく自社に合わせた形での連絡",
+        "メールの文面は言葉遣いが丁寧で、誤字脱字がなく、不快感や違和感を感じる",
+        "メールで記載されていた候補日時はスケジュー",
+        "メールで事前に資料が共有された。",
+        "メールでの連絡を希望していたにも関わらず電話をかけていないか",
+        "メールに事前質問は記載されていたか？",
+        "商談前のリマインド連絡があった。",
+    ],
+    "商談態勢": [
+        "wifiなど、通信環境は安定しているか？(遅延△、切断×)",
+        "オンラインの入室はオンタイムで参加したか？",
+        "カメラに映る背景は適切か？",
+        "音声は遠く聞こえたりハウリングすることなくクリアに聞こえているか？",
+        "騒音・雑音が横から聞こえないか？",
+        "自分の顔が明るく見える照明の明るさか？",
+        "生首状態や顔が見切れるなど、画角は問題ないか？",
+        "資料の画面共有に時間を要していないか？",
+        "ビジネスシーンに合わせた服装をしているか？（スーツ、ジャケット）",
+        "過度なアクセサリーはつけていないか？",
+        "髪は清潔か？",
+        "ひげは剃っているか？or 適度な化粧はしているか？",
+        "姿勢は崩れていないか？",
+        "自己紹介資料の準備はあったか？",
+        "資料のデザインは洗練されているか？",
+        "パワーポイントのテンプレートや一般的なデザインフォーマットを使用したも",
+        "画面共有された状態で文字が読みやすいような大きさになっているか？",
+        "会社ごとにあわせた提案資料を用意しているか？",
+        "料金プランの内容は理解しやすく、誤認が発生しない内容か？",
+        "サービス提供フローはスケジュール感も含めて明確に記載されているか？",
+        "資料に事例が記載されているか？",
+        "具体的な数字をもとに費用対効果や価値が記載されているか？",
+    ],
+    "営業人間力": [
+        "自然に笑顔をつくっているか？",
+        "褒める言葉を気後れせずに伝えられているか？",
+        "声の大きさは大きいか？",
+        "話す速度は営業先に合わせているか？",
+        "声の抑揚はあるか？",
+        "身振り手振りを行っているか？",
+        "相手が話していることに相づちを打ったり、頷きはあるか？(多少、大げさで",
+        "伝えたいポイントをカーソルやペンでなぞっているか？",
+        "不快感を持たないか？(説明、対応、返答など)",
+        "言動や対応に違和感・不審感は無いか？",
+        "ペンで書いた文字はきれいか？",
+        "画面にたいして、正面を向いているか？",
+        "相手の業界の知識を持ち合わせているか？この人はわかっている！と思えるか",
+        "相手の商材について、イメージを持っているか？近しい業界の事例などを伝え",
+        "ビジネスモデルの理解ができているか？キャッシュポイントなどを認識して、",
+        "沈黙に不安な顔をしていないか",
+        "相手におびえていないか？",
+        "自社からの質問にイライラしていないか？不快感を顔に出していないか？",
+        "○○社長/代表/様と呼んでいるか",
+        "貢献できます。など断言ができているか？※嘘はNG",
+        "沈黙のアテンションがあるか？",
+        "咳をするときや、相手の話をしっかり聞きたいときにマイクオフにするといっ",
+        "リレーションは築けているか？(最後に雑談等)",
+        "最後に大きな声で御礼が言えているか？",
+        "向こうが画面を切るまで待っているか？",
+    ],
+    "商談対応力": [
+        "冒頭大きな声でさわやかに挨拶できているか？",
+        "音声の聞こえ方やカメラ画面の見え方に違和感などがないか確認しているか？",
+        "いきなり質問から始めるのではなく商談の方向性や流れを明確にしてからスタ",
+        "商談担当者の自己紹介は行っているか？",
+        "打ち合わせのタイムスケジュール感を冒頭ですり合わせているか？",
+        "商談をされる側が不快感を示すような一方的な質問責めをしていないか？",
+        "HPや事前情報を調べれば把握できるような質問をしていないか？",
+        "質問に回答した後の相槌や反応はしているか？",
+        "質問に回答した後のメモに時間を要して沈黙の時間を生んでいないか？",
+        "質問回答後に「ありがとうございます」と御礼を伝えているか？",
+        "自社の会社概要について話しているか？",
+        "提供するサービスのビジネスモデルを分かりやすく簡潔に話しているか？",
+        "ビジネスモデルは企業HP記載の内容と一致しているか？(虚偽、誇大記載は",
+        "他社との違いや優位性について触れているか？",
+        "事例共有は営業を受ける側に近い事例を準備し、説明しているか？",
+        "具体的な数値効果について仮説を交えながらわかりやすく説明しているか？",
+        "一方的なサービス説明に終始するのではなく、中間で質疑応答の時間を設けて",
+        "サービスフローはスケジュール感を交えて説明できているか？",
+        "料金プランは一部を切り出して説明するのではなく、全体でかかる費用を網羅",
+        "リスクやデメリットについても説明しているか？",
+        "営業を受けている側のニーズに合わせた提案を行っているか？",
+        "質問に対して結論ファーストで簡潔に回答できているか？",
+        "自社・他社情報を共有する際には情報セキュリティに十分に配慮できているか",
+        "BANT情報を聞けているか？",
+        "導入に向けた懸念点を聞き出しているか？（テストクロージング）",
+        "金額懸念に対しての交渉に応じる姿勢は見せているか？",
+        "ネクストアクションの提案やすり合わせを行っているか？",
+        "決裁者を交えた次回打ち合わせ日程調整の打診を行っているか？",
+        "検討期限を区切っているか？",
+        "金額に対しての価値が伝わっており、価格に対し安いと思える価値訴求ができ",
+        "強引なクロージングで終えるのではなく気分の良い終話だったか",
+    ],
+    "商談後": [
+        "商談後のサンクスメールは最速で送られてきたか？",
+        "サンクスメールは商談企業ごとに内容を合わせて送っているか？",
+        "商談後に追加質問を送った後の回答返信速度",
+        "商談で区切った検討期限日時にフォローの連絡があったか",
+        "営業資料だけではなく事例や提案資料など検討材料になりえる資料の共有があ",
+        "会社自体に信頼性を感じることができたか？",
+        "サービス自体に信頼性を持てると感じることはできたか？",
+        "営業マンの対応は正直かつ誠実で好印象を持つことはできたか？",
+        "相手の立場にたった商談だったと評価することはできるか？",
+        "サービス内容はわかりやすく、商談の時間で理解しきることはできたか？",
+        "営業代行会社への発注をしている企業に勧めたいと思えたか？",
+    ],
+}
+
+
+# ==============================
+# 共通ユーティリティ
 # ==============================
 
-class QAPair(BaseModel):
-    question: str = Field(description="質問内容")
-    answer: str = Field(description="回答")
+def _normalize_evaluation(evaluation: str) -> str:
+    """AIが出力する〇△✕の表記ゆれをすべて正規化する"""
+    evaluation = evaluation.replace("○", "〇").replace("◯", "〇")
+    evaluation = evaluation.replace("O", "〇").replace("o", "〇")
+    evaluation = evaluation.replace("×", "✕").replace("✗", "✕")
+    evaluation = evaluation.replace("X", "✕").replace("x", "✕")
+    return evaluation.strip()
 
-class ChecklistItem(BaseModel):
-    display_text: str = Field(description="評価項目名")
-    evaluation: str = Field(description="〇, △, ✕, または空欄")
-    comment: str = Field(description="△または✕の場合、その理由を具体的に1文で記載。〇の場合は空欄")
 
-class SalesReport(BaseModel):
-    cl_company_name: str = Field(description="商談相手の企業名")
-    cl_attendee_name: str = Field(description="相手方担当者名")
-    cl_attendee_role: str = Field(description="相手方役職")
-    our_attendee_name: str = Field(description="自社担当者名")
-    impression: str = Field(description="全体統括コメント・所感")
+def _parse_json_output(raw_text: str) -> dict:
+    """AIの出力からJSONを安全にパースする"""
+    text = re.sub(r"```json\s*", "", raw_text)
+    text = re.sub(r"```\s*", "", text)
+    return json.loads(text.strip())
 
-    # HP情報・商談情報は動的項目に対応したdict形式
-    hp_info: Dict[str, str] = Field(
-        description="HP情報整理。キーが項目名（hp_itemsで指定した名称と完全一致）、値がその内容"
-    )
-    neg_info: Dict[str, str] = Field(
-        description="商談での情報整理。キーが項目名（neg_itemsで指定した名称と完全一致）、値がその内容"
-    )
 
-    # チェックリスト（31項目固定）
-    checklist_evaluations: List[ChecklistItem] = Field(
-        description="以下の31項目のみを評価する。display_textは各項目の文章を15文字以上含む形で記載すること"
-    )
-    questions_from_us: List[QAPair] = Field(
-        description="弊社（株式会社Locareの営業担当）から先方（営業をしている会社）への質問と先方の回答"
-    )
-    questions_from_client: List[QAPair] = Field(
-        description="先方（営業をしている会社）から弊社（株式会社Locare）への質問とLocareの回答"
-    )
+def _get_gspread_client(service_account_info: dict):
+    """gspreadクライアントとCredentialsを返す"""
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+    gc = gspread.authorize(creds)
+    return gc, creds
+
+
+def _copy_template(creds, template_id: str, folder_id: str, name: str) -> str:
+    """テンプレートをコピーして新しいシートIDを返す"""
+    drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    try:
+        folder_info = drive_service.files().get(
+            fileId=folder_id, supportsAllDrives=True, fields="driveId"
+        ).execute()
+        shared_drive_id = folder_info.get("driveId")
+    except Exception:
+        shared_drive_id = None
+
+    copy_body = {"name": name, "parents": [folder_id]}
+    if shared_drive_id:
+        copy_body["driveId"] = shared_drive_id
+        copy_body["teamDriveId"] = shared_drive_id
+
+    copy_file = drive_service.files().copy(
+        fileId=template_id,
+        body=copy_body,
+        supportsAllDrives=True,
+        fields="id",
+    ).execute()
+
+    return copy_file["id"]
 
 
 # ==============================
-# 2. AIによるレポート内容生成
+# 1. データ構造の定義（新規作成モード用）
+# ==============================
+
+class QAPair:
+    def __init__(self, question: str, answer: str):
+        self.question = question
+        self.answer = answer
+
+class ChecklistItem:
+    def __init__(self, display_text: str, evaluation: str, comment: str):
+        self.display_text = display_text
+        self.evaluation = evaluation
+        self.comment = comment
+
+
+# ==============================
+# 2. AIによるレポート内容生成（新規作成モード）
 # ==============================
 
 def generate_report_content(
@@ -59,18 +209,15 @@ def generate_report_content(
     hp_items: list,
     neg_items: list,
 ) -> dict:
-    """
-    文字起こし・HP情報・資料をもとにAIがレポートを生成する。
-    hp_items / neg_items は app.py のセッションステートから受け取る動的リスト。
-    """
+    """文字起こし・HP情報・資料をもとにAIがフルレポートを生成する"""
 
-    # 項目リストをプロンプト用の文字列に変換
     hp_items_str  = "\n".join(f"  - {item}" for item in hp_items)
     neg_items_str = "\n".join(f"  - {item}" for item in neg_items)
-
-    # JSON出力フォーマット指示（Pydanticパーサーを使わず直接指定）
     hp_json_example  = ", ".join(f'"{item}": "内容"' for item in hp_items[:3]) + ", ..."
     neg_json_example = ", ".join(f'"{item}": "内容"' for item in neg_items[:3]) + ", ..."
+
+    # 商談対応力31項目をプロンプトに埋め込む
+    checklist_str = "\n".join(CHECKLIST_ITEMS_BY_CATEGORY["商談対応力"])
 
     prompt = f"""
 あなたは超一流のBtoBセールス・イネーブルメント（営業組織強化）の専門家です。
@@ -85,12 +232,12 @@ def generate_report_content(
    - PDFファイルは参照しないこと。
    - Locare・Saleshub等、運営側の情報は含めないこと。
 
-2. チェックリスト31項目について、事実に基づき以下の基準で評価してください。
+2. チェックリスト項目について、事実に基づき以下の基準で評価してください。
    - 「〇」：基準を満たしている／加点要素あり
    - 「△」：一部不足／普通
    - 「✕」：基準未達／改善が必要
    - 判断できない場合は空欄
-   必ず全31項目に対していずれかを入力すること。
+   必ず全項目に対していずれかを入力すること。
    △または✕の場合はcommentフィールドに理由を必ず記載すること。
 
 3. HP情報と商談情報の差分を明確にしてください。
@@ -111,38 +258,8 @@ def generate_report_content(
 【商談情報として抽出する項目（neg_infoのキーと完全一致させること）】
 {neg_items_str}
 
-【評価項目（チェックリスト31件）】
-冒頭大きな声でさわやかに挨拶できているか？
-音声の聞こえ方やカメラ画面の見え方に違和感などがないか確認しているか？
-いきなり質問から始めるのではなく商談の方向性や流れを明確にしてからスタートしているか？
-商談担当者の自己紹介は行っているか？
-打ち合わせのタイムスケジュール感を冒頭ですり合わせているか？
-商談をされる側が不快感を示すような一方的な質問責めをしていないか？
-HPや事前情報を調べれば把握できるような質問をしていないか？
-質問に回答した後の相槌や反応はしているか？
-質問に回答した後のメモに時間を要して沈黙の時間を生んでいないか？
-質問回答後に「ありがとうございます」と御礼を伝えているか？
-自社の会社概要について話しているか？
-提供するサービスのビジネスモデルを分かりやすく簡潔に話しているか？
-ビジネスモデルは企業HP記載の内容と一致しているか？(虚偽、誇大記載はしていないか？)
-他社との違いや優位性について触れているか？
-事例共有は営業を受ける側に近い事例を準備し、説明しているか？
-具体的な数値効果について仮説を交えながらわかりやすく説明しているか？
-一方的なサービス説明に終始するのではなく、中間で質疑応答の時間を設けているか？
-サービスフローはスケジュール感を交えて説明できているか？
-料金プランは一部を切り出して説明するのではなく、全体でかかる費用を網羅的に説明できているか？
-リスクやデメリットについても説明しているか？
-営業を受けている側のニーズに合わせた提案を行っているか？
-質問に対して結論ファーストで簡潔に回答できているか？
-自社・他社情報を共有する際には情報セキュリティに十分に配慮できているか？
-BANT情報を聞けているか？
-導入に向けた懸念点を聞き出しているか？（テストクロージング）
-金額懸念に対しての交渉に応じる姿勢は見せているか？
-ネクストアクションの提案やすり合わせを行っているか？
-決裁者を交えた次回打ち合わせ日程調整の打診を行っているか？
-検討期限を区切っているか？
-金額に対しての価値が伝わっており、価格に対し安いと思える価値訴求ができているか？
-強引なクロージングで終えるのではなく気分の良い終話だったか
+【評価項目（チェックリスト）】
+{checklist_str}
 
 ======= 営業資料/HP/文字起こし =======
 {website_text}
@@ -159,12 +276,8 @@ BANT情報を聞けているか？
   "cl_attendee_role": "相手方役職",
   "our_attendee_name": "自社担当者名",
   "impression": "全体統括コメント（600〜800字）",
-  "hp_info": {{
-    {hp_json_example}
-  }},
-  "neg_info": {{
-    {neg_json_example}
-  }},
+  "hp_info": {{ {hp_json_example} }},
+  "neg_info": {{ {neg_json_example} }},
   "checklist_evaluations": [
     {{"display_text": "評価項目名（15文字以上）", "evaluation": "〇", "comment": ""}},
     ...
@@ -181,29 +294,17 @@ BANT情報を聞けているか？
 """
 
     output = model_client.invoke(prompt)
+    output_text = (
+        "".join(b["text"] for b in output.content if isinstance(b, dict) and b.get("type") == "text")
+        if isinstance(output.content, list)
+        else output.content
+    )
 
-    # output.content がリスト形式の場合と文字列の場合の両方に対応
-    if isinstance(output.content, list):
-        output_text = "".join(
-            block["text"] for block in output.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    else:
-        output_text = output.content
+    parsed = _parse_json_output(output_text)
 
-    # コードブロック（```json ... ```）が含まれていれば除去
-    output_text = re.sub(r"```json\s*", "", output_text)
-    output_text = re.sub(r"```\s*", "", output_text)
-    output_text = output_text.strip()
-
-    # JSONとしてパース
-    parsed = json.loads(output_text)
-
-    # hp_info / neg_info のキーが存在しない項目を空文字で補完
-    if "hp_info" not in parsed:
-        parsed["hp_info"] = {}
-    if "neg_info" not in parsed:
-        parsed["neg_info"] = {}
+    # キーが欠けている項目を補完
+    parsed.setdefault("hp_info", {})
+    parsed.setdefault("neg_info", {})
     for item in hp_items:
         parsed["hp_info"].setdefault(item, "※情報なし")
     for item in neg_items:
@@ -213,21 +314,8 @@ BANT情報を聞けているか？
 
 
 # ==============================
-# 3. Googleスプレッドシートへの書き込み
+# 3. 新規スプレッドシートへの書き込み（新規作成モード）
 # ==============================
-
-def _normalize_evaluation(evaluation: str) -> str:
-    """AIが出力する可能性のある〇△✕の表記ゆれをすべて正規化する"""
-    evaluation = evaluation.replace("○", "〇")   # U+25CB → U+3007
-    evaluation = evaluation.replace("◯", "〇")   # U+25EF → U+3007
-    evaluation = evaluation.replace("O", "〇")   # 半角英字O
-    evaluation = evaluation.replace("o", "〇")   # 半角英字o
-    evaluation = evaluation.replace("×", "✕")   # U+00D7 → U+2715
-    evaluation = evaluation.replace("✗", "✕")   # U+2717 → U+2715
-    evaluation = evaluation.replace("X", "✕")   # 半角英字X
-    evaluation = evaluation.replace("x", "✕")   # 半角英字x
-    return evaluation.strip()
-
 
 def fill_google_sheet(
     data: dict,
@@ -237,51 +325,16 @@ def fill_google_sheet(
     hp_items: list,
     neg_items: list,
 ) -> str:
-    """
-    テンプレートスプレッドシートをコピーし、dataの内容を書き込んで返す。
-    hp_items / neg_items は動的項目リスト（app.pyのセッションステートから渡す）。
-    """
+    """テンプレートをコピーしてフルレポートを書き込む"""
 
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
-    drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    gc, creds = _get_gspread_client(service_account_info)
+    new_sheet_id = _copy_template(
+        creds, template_id, folder_id,
+        f"{data.get('cl_company_name', '名称未設定')}様_営業レポート"
+    )
 
-    # --- テンプレートをコピー ---
-    try:
-        folder_info = drive_service.files().get(
-            fileId=folder_id,
-            supportsAllDrives=True,
-            fields="driveId",
-        ).execute()
-        shared_drive_id = folder_info.get("driveId")
-    except Exception:
-        shared_drive_id = None
-
-    copy_body = {
-        "name": f"{data.get('cl_company_name', '名称未設定')}様_営業レポート",
-        "parents": [folder_id],
-    }
-    if shared_drive_id:
-        copy_body["driveId"] = shared_drive_id
-        copy_body["teamDriveId"] = shared_drive_id
-
-    copy_file = drive_service.files().copy(
-        fileId=template_id,
-        body=copy_body,
-        supportsAllDrives=True,
-        fields="id",
-    ).execute()
-
-    new_sheet_id = copy_file["id"]
-
-    # --- gspreadで書き込み開始 ---
-    gc = gspread.authorize(creds)
     sh = gc.open_by_key(new_sheet_id)
     ws = sh.get_worksheet(0)
-
     batch_updates = []
 
     # 1. 基本ヘッダー情報
@@ -292,71 +345,193 @@ def fill_google_sheet(
     batch_updates.append({"range": "B6", "values": [[data.get("our_attendee_name", "")]]})
     batch_updates.append({"range": "A50", "values": [[data.get("impression", "")]]})
 
-    # 2. HP情報
-    #    A列（Row35〜）: 項目名
-    #    C列（Row35〜）: 内容
+    # 2. HP情報（A列=項目名、C列=内容）
     hp_info = data.get("hp_info", {})
-    hp_label_values   = [[item] for item in hp_items]
-    hp_content_values = [[hp_info.get(item, "")] for item in hp_items]
-    hp_end_row = 34 + len(hp_items)
-    batch_updates.append({"range": f"A35:A{hp_end_row}", "values": hp_label_values})
-    batch_updates.append({"range": f"C35:C{hp_end_row}", "values": hp_content_values})
+    hp_end = 34 + len(hp_items)
+    batch_updates.append({"range": f"A35:A{hp_end}", "values": [[k] for k in hp_items]})
+    batch_updates.append({"range": f"C35:C{hp_end}", "values": [[hp_info.get(k, "")] for k in hp_items]})
 
-    # 3. 商談での情報整理
-    #    F列（Row35〜）: 項目名
-    #    H列（Row35〜）: 内容
+    # 3. 商談情報（F列=項目名、H列=内容）
     neg_info = data.get("neg_info", {})
-    neg_label_values   = [[item] for item in neg_items]
-    neg_content_values = [[neg_info.get(item, "")] for item in neg_items]
-    neg_end_row = 34 + len(neg_items)
-    batch_updates.append({"range": f"F35:F{neg_end_row}", "values": neg_label_values})
-    batch_updates.append({"range": f"H35:H{neg_end_row}", "values": neg_content_values})
+    neg_end = 34 + len(neg_items)
+    batch_updates.append({"range": f"F35:F{neg_end}", "values": [[k] for k in neg_items]})
+    batch_updates.append({"range": f"H35:H{neg_end}", "values": [[neg_info.get(k, "")] for k in neg_items]})
 
-    # 4. Q&A セクション
-    #    弊社→先方（Row 3〜16、最大14件）
+    # 4. Q&A
     us_qa = data.get("questions_from_us", [])
     us_qa_values = [[qa["question"], qa["answer"]] for qa in us_qa[:14]]
     if us_qa_values:
-        batch_updates.append({
-            "range": f"I3:J{2 + len(us_qa_values)}",
-            "values": us_qa_values,
-        })
+        batch_updates.append({"range": f"I3:J{2 + len(us_qa_values)}", "values": us_qa_values})
 
-    #    先方→弊社（Row 18〜30、最大13件）
     client_qa = data.get("questions_from_client", [])
     client_qa_values = [[qa["question"], qa["answer"]] for qa in client_qa[:13]]
     if client_qa_values:
-        batch_updates.append({
-            "range": f"I18:J{17 + len(client_qa_values)}",
-            "values": client_qa_values,
-        })
+        batch_updates.append({"range": f"I18:J{17 + len(client_qa_values)}", "values": client_qa_values})
 
-    # 5. チェックリスト評価（Row 130〜160固定・31項目）
-    #    D列のテキストと照合し、G列に評価・J列に備考を書き込む
+    # 5. チェックリスト評価（商談対応力 Row130〜160、H列=評価、J列=備考）
     TARGET_ROWS = list(range(130, 161))
-    sheet_d_col = ws.col_values(4)  # D列を全取得
+    sheet_d_col = ws.col_values(4)
 
     for item in data.get("checklist_evaluations", []):
         for row_num in TARGET_ROWS:
             d_text = sheet_d_col[row_num - 1] if row_num - 1 < len(sheet_d_col) else ""
             if item["display_text"][:15] in str(d_text):
                 evaluation = _normalize_evaluation(item["evaluation"])
-
-                # G列：評価（〇△✕）
-                batch_updates.append({
-                    "range": f"G{row_num}",
-                    "values": [[evaluation]],
-                })
-                # J列：備考（△または✕のときのみ）
+                batch_updates.append({"range": f"H{row_num}", "values": [[evaluation]]})
                 comment = item.get("comment", "")
                 if comment and evaluation in ["△", "✕"]:
+                    batch_updates.append({"range": f"J{row_num}", "values": [[comment]]})
+                break
+
+    ws.batch_update(batch_updates)
+    return f"https://docs.google.com/spreadsheets/d/{new_sheet_id}"
+
+
+# ==============================
+# 4. チェックリストのみAI評価（評価追記モード）
+# ==============================
+
+def evaluate_checklist_only(
+    text: str,
+    model_client,
+    target_categories: List[str],
+) -> List[dict]:
+    """
+    文字起こしまたはメール文章から、指定カテゴリのチェックリストのみを評価する。
+    文字起こし（商談内容）でも、メール文章（商談前後の連絡）でも対応。
+    """
+
+    # 対象カテゴリの評価項目を収集
+    all_items = []
+    for cat in target_categories:
+        items = CHECKLIST_ITEMS_BY_CATEGORY.get(cat, [])
+        for item in items:
+            all_items.append({"category": cat, "text": item})
+
+    items_str = "\n".join(
+        f"[{i['category']}] {i['text']}" for i in all_items
+    )
+
+    prompt = f"""
+あなたはプロの営業評価者です。
+以下のテキスト（商談文字起こし、またはメール文章）をもとに、
+チェックリストの各項目を〇△✕の三段階で評価してください。
+
+【評価基準】
+- 「〇」：基準を満たしている／確認できる
+- 「△」：一部不足／判断が難しい
+- 「✕」：基準未達／確認できない／問題あり
+- テキストから判断できない場合も「△」または「✕」を選択し、理由を記載すること
+
+【評価項目】
+{items_str}
+
+【評価対象テキスト】
+{text}
+
+【出力形式】
+以下のJSON配列のみを出力すること。前置き・説明文・コードブロック（```）は含めないこと。
+
+[
+  {{
+    "display_text": "評価項目のテキスト（15文字以上含める）",
+    "evaluation": "〇",
+    "comment": ""
+  }},
+  {{
+    "display_text": "評価項目のテキスト",
+    "evaluation": "✕",
+    "comment": "理由を1文で記載"
+  }},
+  ...
+]
+"""
+
+    output = model_client.invoke(prompt)
+    output_text = (
+        "".join(b["text"] for b in output.content if isinstance(b, dict) and b.get("type") == "text")
+        if isinstance(output.content, list)
+        else output.content
+    )
+
+    # JSONパース
+    text_clean = re.sub(r"```json\s*", "", output_text)
+    text_clean = re.sub(r"```\s*", "", text_clean).strip()
+    result = json.loads(text_clean)
+
+    # 評価の正規化
+    for item in result:
+        item["evaluation"] = _normalize_evaluation(item.get("evaluation", ""))
+
+    return result
+
+
+# ==============================
+# 5. 既存シートへの評価書き込み（評価追記モード）
+# ==============================
+
+def write_evaluation_to_existing_sheet(
+    checklist_result: List[dict],
+    target_rows: List[int],
+    service_account_info: dict,
+    template_id: str,
+    folder_id: str,
+    existing_sheet_id: Optional[str],
+    write_evaluation: bool,
+    write_comment: bool,
+) -> str:
+    """
+    既存シート（またはテンプレートの新規コピー）の指定行範囲に
+    チェックリスト評価（H列）と備考（J列）を書き込む。
+
+    existing_sheet_id が None の場合はテンプレートをコピーして新規作成する。
+    書き込む列：
+        H列 = 評価（〇△✕）
+        J列 = 備考
+    照合方法：D列テキストの先頭15文字 vs checklist_resultのdisplay_text先頭15文字
+    """
+
+    gc, creds = _get_gspread_client(service_account_info)
+
+    # シートの解決（既存 or 新規コピー）
+    if existing_sheet_id:
+        sh = gc.open_by_key(existing_sheet_id)
+        result_url = f"https://docs.google.com/spreadsheets/d/{existing_sheet_id}"
+    else:
+        new_id = _copy_template(creds, template_id, folder_id, "営業レポート（評価追記）")
+        sh = gc.open_by_key(new_id)
+        result_url = f"https://docs.google.com/spreadsheets/d/{new_id}"
+
+    ws = sh.get_worksheet(0)
+
+    # D列を全取得（照合用）
+    sheet_d_col = ws.col_values(4)
+
+    batch_updates = []
+
+    for item in checklist_result:
+        item_text_key = item.get("display_text", "")[:15]
+        evaluation    = _normalize_evaluation(item.get("evaluation", ""))
+        comment       = item.get("comment", "")
+
+        for row_num in target_rows:
+            d_text = sheet_d_col[row_num - 1] if row_num - 1 < len(sheet_d_col) else ""
+            if item_text_key in str(d_text):
+                # H列：評価（〇△✕）
+                if write_evaluation:
+                    batch_updates.append({
+                        "range": f"H{row_num}",
+                        "values": [[evaluation]],
+                    })
+                # J列：備考
+                if write_comment and comment:
                     batch_updates.append({
                         "range": f"J{row_num}",
                         "values": [[comment]],
                     })
                 break
 
-    # 全データを一括書き込み
-    ws.batch_update(batch_updates)
+    if batch_updates:
+        ws.batch_update(batch_updates)
 
-    return f"https://docs.google.com/spreadsheets/d/{new_sheet_id}"
+    return result_url
