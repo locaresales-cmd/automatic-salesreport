@@ -402,12 +402,21 @@ with tab_eval:
                             )
                             checklist_result.extend(result_e)
 
+                        # display_textの先頭15文字で重複除去（メール系を優先して残す）
+                        seen_keys = {}
+                        for item in checklist_result:
+                            key = item.get("display_text", "")[:15]
+                            seen_keys[key] = item  # 後から来たもの（メール系）で上書き
+                        checklist_result = list(seen_keys.values())
+
                         st.success(f"評価完了！{len(checklist_result)}件の項目を評価しました。")
 
                         # 評価結果プレビュー
                         with st.expander("📊 評価結果プレビュー（書き込み前に確認）", expanded=True):
                             for item in checklist_result:
                                 mark = item.get("evaluation", "")
+                                if not mark:  # 空欄は表示・書き込みスキップ
+                                    continue
                                 if mark == "〇":
                                     color = "green"
                                 elif mark == "△":
