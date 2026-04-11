@@ -82,7 +82,8 @@ CHECKLIST_CATEGORIES = {
     "商談態勢":   {"rows": list(range(83, 105)),  "label": "商談態勢（No.1〜22）"},
     "営業人間力": {"rows": list(range(105, 130)), "label": "営業人間力（No.1〜25）"},
     "商談対応力": {"rows": list(range(130, 161)), "label": "商談対応力（No.1〜31）"},
-    "商談後":     {"rows": list(range(162, 173)), "label": "商談後（No.1〜11）"},
+    "商談後（メール）":   {"rows": list(range(162, 167)), "label": "商談後フォロー（メール評価・No.1〜5）"},
+    "商談後（全体評価）": {"rows": list(range(167, 173)), "label": "商談後 全体評価（文字起こし評価・No.6〜11）"},
 }
 
 # ==============================
@@ -318,8 +319,8 @@ with tab_eval:
         st.subheader("3. 評価の範囲と種類を選択")
 
         st.markdown("**📹 文字起こしから評価できるカテゴリ**")
-        TRANSCRIPT_CATS = ["営業人間力", "商談対応力"]
-        EMAIL_CATS      = ["商談前IS", "商談後"]
+        TRANSCRIPT_CATS = ["営業人間力", "商談対応力", "商談後（全体評価）"]
+        EMAIL_CATS      = ["商談前IS", "商談後（メール）"]
 
         selected_cats = {}
         for cat_name in TRANSCRIPT_CATS:
