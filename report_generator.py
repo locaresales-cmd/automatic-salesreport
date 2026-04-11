@@ -291,7 +291,7 @@ def fill_google_sheet(
     gc, creds = _get_gspread_client(service_account_info)
     new_sheet_id = _copy_template(
         creds, template_id, folder_id,
-        f"{data.get('cl_company_name', '名称未設定')}様_営業レポート"
+        f"AI作成_{data.get('cl_company_name', '名称未設定')}様_営業レポート"
     )
 
     sh = gc.open_by_key(new_sheet_id)
@@ -511,7 +511,7 @@ def write_evaluation_to_existing_sheet(
         sh = gc.open_by_key(existing_sheet_id)
         result_url = f"https://docs.google.com/spreadsheets/d/{existing_sheet_id}"
     else:
-        new_id = _copy_template(creds, template_id, folder_id, "営業レポート（評価追記）")
+        new_id = _copy_template(creds, template_id, folder_id, "AI作成_営業レポート（評価追記）")
         sh = gc.open_by_key(new_id)
         result_url = f"https://docs.google.com/spreadsheets/d/{new_id}"
 
