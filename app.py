@@ -80,7 +80,7 @@ CATEGORY_PRESETS = {
 CHECKLIST_CATEGORIES = {
     "商談前IS":   {"rows": list(range(72, 82)),   "label": "商談前IS（No.1〜10）"},
     "商談態勢":   {"rows": list(range(83, 105)),  "label": "商談態勢（No.1〜22）"},
-    "営業人間力": {"rows": list(range(105, 130)), "label": "営業人間力（No.1〜25）"},
+    "営業人間力": {"rows": list(range(105, 130)), "label": "営業人間力（No.9,10,13,14,15,19,20,23）"},
     "商談対応力": {"rows": list(range(130, 161)), "label": "商談対応力（No.1〜31）"},
     "商談後（メール）":   {"rows": list(range(162, 167)), "label": "商談後フォロー（メール評価・No.1〜5）"},
     "商談後（全体評価）": {"rows": list(range(167, 173)), "label": "商談後 全体評価（文字起こし評価・No.6〜11）"},
